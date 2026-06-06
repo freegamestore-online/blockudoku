@@ -1,5 +1,5 @@
 {
-  "name": "@APPNAME/web",
+  "name": "@blockudoku/web",
   "private": true,
   "type": "module",
   "scripts": {

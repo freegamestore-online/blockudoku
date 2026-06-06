@@ -1,14 +1,15 @@
 {
-  "name": "APPNAME",
+  "name": "blockudoku",
   "private": true,
   "packageManager": "pnpm@10.30.3",
-  "engines": { "node": ">=22" },
-  "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "dev": "pnpm --filter @APPNAME/web dev",
-    "build": "pnpm --filter @APPNAME/web build",
-    "preview": "pnpm --filter @APPNAME/web preview",
-    "typecheck": "pnpm --filter @APPNAME/web exec tsc -b",
-    "test": "pnpm --filter @APPNAME/web test"
+    "dev": "pnpm --filter @blockudoku/web dev",
+    "build": "pnpm --filter @blockudoku/web build",
+    "preview": "pnpm --filter @blockudoku/web preview",
+    "typecheck": "pnpm --filter @blockudoku/web exec tsc -b",
+    "test": "pnpm --filter @blockudoku/web test"
   }
 }
