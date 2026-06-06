@@ -244,7 +244,7 @@ function Game() {
         height: "100%", gap: 16, userSelect: "none", touchAction: "none" }}
         onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}>
 
-        <div ref={boardRef} style={{ display: "grid", gridTemplateColumns: `repeat(${SIZE}, 1fr)`, gap: 2,
+        <div ref={boardRef} style={{ display: "grid", gridTemplateColumns: `repeat(${SIZE}, 1fr)`, gridTemplateRows: `repeat(${SIZE}, 1fr)`, gap: 2,
           width: "min(85vw, calc(85vh - 160px), 400px)", aspectRatio: "1", background: "var(--line)",
           borderRadius: "var(--radius)", padding: 4 }}>
           {Array.from({ length: SIZE * SIZE }, (_, i) => {
