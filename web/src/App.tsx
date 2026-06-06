@@ -1,9 +1,8 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   GameShell,
   GameTopbar,
   GameOverScreen,
-  GameButton,
   useGameSounds,
 } from "@freegamestore/games";
 
@@ -11,7 +10,7 @@ import {
 type Cell = 0 | 1;
 type Grid = Cell[][];
 type Shape = [number, number][]; // [row, col] offsets
-type Piece = { shape: Shape; color: string };
+interface Piece { shape: Shape; color: string }
 
 // --- Constants ---
 const SIZE = 9;
@@ -21,7 +20,6 @@ const COLORS = [
   "#ec4899", "#06b6d4", "#f97316",
 ];
 
-// --- Shape definitions ---
 const SHAPES: Shape[] = [
   [[0,0]],
   [[0,0],[0,1]],
@@ -44,50 +42,47 @@ const SHAPES: Shape[] = [
 ];
 
 function randomPiece(): Piece {
-  const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
-  const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+  const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)]!;
+  const color = COLORS[Math.floor(Math.random() * COLORS.length)]!;
   return { shape, color };
 }
 
 function emptyGrid(): Grid {
-  return Array.from({ length: SIZE }, () => Array(SIZE).fill(0) as Cell[]);
+  return Array.from({ length: SIZE }, () => Array<Cell>(SIZE).fill(0));
 }
 
 function canPlace(grid: Grid, shape: Shape, row: number, col: number): boolean {
   for (const [dr, dc] of shape) {
     const r = row + dr, c = col + dc;
-    if (r < 0 || r >= SIZE || c < 0 || c >= SIZE || grid[r][c] !== 0) return false;
+    if (r < 0 || r >= SIZE || c < 0 || c >= SIZE || grid[r]![c] !== 0) return false;
   }
   return true;
 }
 
 function placeShape(grid: Grid, shape: Shape, row: number, col: number): Grid {
   const g = grid.map((r) => [...r]);
-  for (const [dr, dc] of shape) g[row + dr][col + dc] = 1;
+  for (const [dr, dc] of shape) g[row + dr]![col + dc] = 1;
   return g;
 }
 
 function findClears(grid: Grid): Set<string> {
   const toClear = new Set<string>();
-  // Rows
   for (let r = 0; r < SIZE; r++) {
-    if (grid[r].every((c) => c === 1)) {
+    if (grid[r]!.every((c) => c === 1)) {
       for (let c = 0; c < SIZE; c++) toClear.add(`${r},${c}`);
     }
   }
-  // Columns
   for (let c = 0; c < SIZE; c++) {
     let full = true;
-    for (let r = 0; r < SIZE; r++) { if (grid[r][c] === 0) { full = false; break; } }
+    for (let r = 0; r < SIZE; r++) { if (grid[r]![c] === 0) { full = false; break; } }
     if (full) for (let r = 0; r < SIZE; r++) toClear.add(`${r},${c}`);
   }
-  // 3x3 boxes
   for (let br = 0; br < SIZE; br += BOX) {
     for (let bc = 0; bc < SIZE; bc += BOX) {
       let full = true;
       for (let r = br; r < br + BOX; r++)
         for (let c = bc; c < bc + BOX; c++)
-          if (grid[r][c] === 0) full = false;
+          if (grid[r]![c] === 0) full = false;
       if (full)
         for (let r = br; r < br + BOX; r++)
           for (let c = bc; c < bc + BOX; c++) toClear.add(`${r},${c}`);
@@ -99,8 +94,9 @@ function findClears(grid: Grid): Set<string> {
 function clearCells(grid: Grid, cells: Set<string>): Grid {
   const g = grid.map((r) => [...r]);
   for (const key of cells) {
-    const [r, c] = key.split(",").map(Number);
-    g[r][c] = 0;
+    const parts = key.split(",");
+    const r = Number(parts[0]), c = Number(parts[1]);
+    g[r]![c] = 0;
   }
   return g;
 }
@@ -115,7 +111,6 @@ function canFitAny(grid: Grid, pieces: (Piece | null)[]): boolean {
   return false;
 }
 
-// --- Piece preview component ---
 function PiecePreview({
   piece, index, dragging, onDragStart,
 }: {
@@ -134,11 +129,7 @@ function PiecePreview({
   return (
     <div
       className="flex items-center justify-center w-20 h-20 cursor-grab active:cursor-grabbing rounded-lg"
-      style={{
-        opacity: isDragging ? 0.3 : 1,
-        background: "var(--line)",
-        touchAction: "none",
-      }}
+      style={{ opacity: isDragging ? 0.3 : 1, background: "var(--line)", touchAction: "none" }}
       onPointerDown={(e) => onDragStart(index, e)}
     >
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, ${cellSize}px)`, gap: "2px" }}>
@@ -159,7 +150,6 @@ function PiecePreview({
   );
 }
 
-// --- Main App ---
 export default function App() {
   const sounds = useGameSounds();
   const [grid, setGrid] = useState<Grid>(emptyGrid);
@@ -173,9 +163,6 @@ export default function App() {
   const [ghostPos, setGhostPos] = useState<{ row: number; col: number } | null>(null);
   const [clearing, setClearing] = useState<Set<string>>(new Set());
   const boardRef = useRef<HTMLDivElement>(null);
-  const dragOffset = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
-
-  const cellSize = useRef(0);
 
   const getCellFromPoint = useCallback((x: number, y: number): { row: number; col: number } | null => {
     const board = boardRef.current;
@@ -184,7 +171,6 @@ export default function App() {
     const gap = 2;
     const totalGap = (SIZE - 1) * gap;
     const cs = (rect.width - totalGap) / SIZE;
-    cellSize.current = cs;
     const col = Math.floor((x - rect.left) / (cs + gap));
     const row = Math.floor((y - rect.top) / (cs + gap));
     if (row < 0 || row >= SIZE || col < 0 || col >= SIZE) return null;
@@ -195,12 +181,10 @@ export default function App() {
     e.preventDefault();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     setDragging(idx);
-    dragOffset.current = { dx: 0, dy: 0 };
   }, []);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (dragging === null) return;
-    // Offset the drop point up and left so the piece appears where the finger is
     const pos = getCellFromPoint(e.clientX - 20, e.clientY - 60);
     setGhostPos(pos);
   }, [dragging, getCellFromPoint]);
@@ -215,8 +199,6 @@ export default function App() {
       const clears = findClears(newGrid);
       const newPieces = [...pieces];
       newPieces[dragging] = null;
-
-      // Refill tray if all placed
       const allUsed = newPieces.every((p) => p === null);
       const nextPieces = allUsed ? [randomPiece(), randomPiece(), randomPiece()] : newPieces;
 
@@ -226,40 +208,27 @@ export default function App() {
         const bonus = linesCleared > 1 ? linesCleared * 28 : 0;
         const pts = clears.size + bonus;
         sounds.playClear();
-
         setTimeout(() => {
           newGrid = clearCells(newGrid, clears);
           setGrid(newGrid);
           setClearing(new Set());
           setScore((s) => {
             const next = s + pts;
-            if (next > best) {
-              setBest(next);
-              try { localStorage.setItem("blockudoku-best", String(next)); } catch {}
-            }
+            if (next > best) { setBest(next); try { localStorage.setItem("blockudoku-best", String(next)); } catch {} }
             return next;
           });
           setPieces(nextPieces);
-          if (!canFitAny(newGrid, nextPieces)) {
-            sounds.playGameOver();
-            setGameOver(true);
-          }
+          if (!canFitAny(newGrid, nextPieces)) { sounds.playGameOver(); setGameOver(true); }
         }, 300);
       } else {
         setGrid(newGrid);
         setScore((s) => {
           const next = s + piece.shape.length;
-          if (next > best) {
-            setBest(next);
-            try { localStorage.setItem("blockudoku-best", String(next)); } catch {}
-          }
+          if (next > best) { setBest(next); try { localStorage.setItem("blockudoku-best", String(next)); } catch {} }
           return next;
         });
         setPieces(nextPieces);
-        if (!canFitAny(newGrid, nextPieces)) {
-          sounds.playGameOver();
-          setGameOver(true);
-        }
+        if (!canFitAny(newGrid, nextPieces)) { sounds.playGameOver(); setGameOver(true); }
       }
     } else if (dragging !== null && ghostPos) {
       sounds.playError();
@@ -276,7 +245,6 @@ export default function App() {
     setClearing(new Set());
   }, []);
 
-  // Ghost validity
   const piece = dragging !== null ? pieces[dragging] : null;
   const ghostValid = piece && ghostPos ? canPlace(grid, piece.shape, ghostPos.row, ghostPos.col) : false;
   const ghostCells = new Set<string>();
@@ -304,7 +272,6 @@ export default function App() {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        {/* Board */}
         <div
           ref={boardRef}
           style={{
@@ -321,7 +288,7 @@ export default function App() {
           {Array.from({ length: SIZE * SIZE }, (_, i) => {
             const r = Math.floor(i / SIZE), c = i % SIZE;
             const key = `${r},${c}`;
-            const filled = grid[r][c] === 1;
+            const filled = grid[r]![c] === 1;
             const isGhost = ghostCells.has(key);
             const isClearing = clearing.has(key);
             const boxR = Math.floor(r / BOX), boxC = Math.floor(c / BOX);
@@ -337,7 +304,7 @@ export default function App() {
                     : filled
                     ? "var(--accent)"
                     : isGhost
-                    ? piece ? `${piece.color}66` : "var(--accent)33"
+                    ? (piece ? `${piece.color}66` : "var(--accent)33")
                     : darkBox
                     ? "var(--paper)"
                     : "color-mix(in srgb, var(--paper) 85%, var(--muted))",
@@ -348,22 +315,13 @@ export default function App() {
           })}
         </div>
 
-        {/* Piece tray */}
         <div className="flex gap-3 justify-center">
           {pieces.map((p, i) => (
-            <PiecePreview
-              key={i}
-              piece={p}
-              index={i}
-              dragging={dragging}
-              onDragStart={handleDragStart}
-            />
+            <PiecePreview key={i} piece={p} index={i} dragging={dragging} onDragStart={handleDragStart} />
           ))}
         </div>
 
-        {gameOver && (
-          <GameOverScreen score={score} highScore={best} onPlayAgain={restart} />
-        )}
+        {gameOver && <GameOverScreen score={score} highScore={best} onPlayAgain={restart} />}
       </div>
     </GameShell>
   );
