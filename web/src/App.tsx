@@ -1,24 +1,10 @@
-import { useState, useCallback, useRef, Component, type ReactNode } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   GameShell,
   GameTopbar,
   GameOverScreen,
   useGameSounds,
 } from "@freegamestore/games";
-
-// Error boundary to catch and display render errors
-class ErrorCatch extends Component<{ children: ReactNode }, { error: string | null }> {
-  state = { error: null as string | null };
-  static getDerivedStateFromError(e: Error) { return { error: e.message + "\n" + e.stack }; }
-  render() {
-    if (this.state.error) return (
-      <div style={{ padding: 20, color: "red", whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 12 }}>
-        {this.state.error}
-      </div>
-    );
-    return this.props.children;
-  }
-}
 
 type Cell = 0 | 1;
 type Grid = Cell[][];
@@ -103,6 +89,31 @@ function findClears(grid: Grid): Set<string> {
   return toClear;
 }
 
+/** Count distinct lines cleared (rows + cols + boxes). */
+function countLines(grid: Grid, cells: Set<string>): number {
+  let lines = 0;
+  for (let r = 0; r < SIZE; r++) {
+    let full = true;
+    for (let c = 0; c < SIZE; c++) if (!cells.has(`${r},${c}`)) { full = false; break; }
+    if (full) lines++;
+  }
+  for (let c = 0; c < SIZE; c++) {
+    let full = true;
+    for (let r = 0; r < SIZE; r++) if (!cells.has(`${r},${c}`)) { full = false; break; }
+    if (full) lines++;
+  }
+  for (let br = 0; br < SIZE; br += BOX) {
+    for (let bc = 0; bc < SIZE; bc += BOX) {
+      let full = true;
+      for (let r = br; r < br + BOX; r++)
+        for (let c = bc; c < bc + BOX; c++)
+          if (!cells.has(`${r},${c}`)) { full = false; break; }
+      if (full) lines++;
+    }
+  }
+  return lines;
+}
+
 function clearCells(grid: Grid, cells: Set<string>): Grid {
   const g = grid.map(r => [...r]);
   for (const key of cells) {
@@ -150,15 +161,18 @@ function PiecePreview({ piece, index, dragging, onDragStart }: {
   );
 }
 
-function Game() {
+const BOARD_PAD = 4;
+
+/** Inner game board — rendered inside GameShell so useGameSounds gets SoundProvider context. */
+function GameBoard({ score, setScore, best, setBest, grid, setGrid,
+  pieces, setPieces, gameOver, setGameOver }: {
+  score: number; setScore: React.Dispatch<React.SetStateAction<number>>;
+  best: number; setBest: React.Dispatch<React.SetStateAction<number>>;
+  grid: Grid; setGrid: React.Dispatch<React.SetStateAction<Grid>>;
+  pieces: (Piece | null)[]; setPieces: React.Dispatch<React.SetStateAction<(Piece | null)[]>>;
+  gameOver: boolean; setGameOver: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
   const sounds = useGameSounds();
-  const [grid, setGrid] = useState<Grid>(emptyGrid);
-  const [pieces, setPieces] = useState<(Piece | null)[]>(() => [randomPiece(), randomPiece(), randomPiece()]);
-  const [score, setScore] = useState(0);
-  const [best, setBest] = useState(() => {
-    try { return parseInt(localStorage.getItem("blockudoku-best") ?? "0"); } catch { return 0; }
-  });
-  const [gameOver, setGameOver] = useState(false);
   const [dragging, setDragging] = useState<number | null>(null);
   const [ghostPos, setGhostPos] = useState<{ row: number; col: number } | null>(null);
   const [clearing, setClearing] = useState<Set<string>>(new Set());
@@ -168,24 +182,38 @@ function Game() {
     const board = boardRef.current;
     if (!board) return null;
     const rect = board.getBoundingClientRect();
+    const innerW = rect.width - BOARD_PAD * 2;
+    const innerH = rect.height - BOARD_PAD * 2;
     const gap = 2;
-    const cs = (rect.width - (SIZE - 1) * gap) / SIZE;
-    const col = Math.floor((x - rect.left) / (cs + gap));
-    const row = Math.floor((y - rect.top) / (cs + gap));
+    const csW = (innerW - (SIZE - 1) * gap) / SIZE;
+    const csH = (innerH - (SIZE - 1) * gap) / SIZE;
+    const col = Math.floor((x - rect.left - BOARD_PAD) / (csW + gap));
+    const row = Math.floor((y - rect.top - BOARD_PAD) / (csH + gap));
     if (row < 0 || row >= SIZE || col < 0 || col >= SIZE) return null;
     return { row, col };
   }, []);
 
   const handleDragStart = useCallback((idx: number, e: React.PointerEvent) => {
     e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
     setDragging(idx);
   }, []);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (dragging === null) return;
-    setGhostPos(getCellFromPoint(e.clientX - 20, e.clientY - 60));
-  }, [dragging, getCellFromPoint]);
+    const p = pieces[dragging];
+    if (!p) return;
+    // Offset: center the piece shape on the pointer, shift up so finger doesn't cover it
+    const shapeRows = Math.max(...p.shape.map(s => s[0])) + 1;
+    const shapeCols = Math.max(...p.shape.map(s => s[1])) + 1;
+    const board = boardRef.current;
+    if (!board) return;
+    const rect = board.getBoundingClientRect();
+    const cs = (rect.width - BOARD_PAD * 2 - (SIZE - 1) * 2) / SIZE;
+    const offsetX = Math.floor(shapeCols / 2) * (cs + 2);
+    const offsetY = Math.floor(shapeRows / 2) * (cs + 2) + 40; // +40 so finger doesn't cover
+    setGhostPos(getCellFromPoint(e.clientX - offsetX, e.clientY - offsetY));
+  }, [dragging, pieces, getCellFromPoint]);
 
   const handlePointerUp = useCallback(() => {
     if (dragging === null) return;
@@ -200,7 +228,9 @@ function Game() {
       const nextPieces = allUsed ? [randomPiece(), randomPiece(), randomPiece()] : newPieces;
       if (clears.size > 0) {
         setClearing(clears);
-        const pts = clears.size + (clears.size > SIZE ? 28 : 0);
+        const lines = countLines(newGrid, clears);
+        // 18 per cell cleared + 10 bonus per extra line (combo)
+        const pts = clears.size + Math.max(0, lines - 1) * 18;
         sounds.playClear();
         setTimeout(() => {
           newGrid = clearCells(newGrid, clears);
@@ -221,15 +251,7 @@ function Game() {
     }
     setDragging(null);
     setGhostPos(null);
-  }, [dragging, ghostPos, grid, pieces, sounds, best]);
-
-  const restart = useCallback(() => {
-    setGrid(emptyGrid());
-    setPieces([randomPiece(), randomPiece(), randomPiece()]);
-    setScore(0);
-    setGameOver(false);
-    setClearing(new Set());
-  }, []);
+  }, [dragging, ghostPos, grid, pieces, sounds, best, setGrid, setScore, setBest, setPieces, setGameOver]);
 
   const piece = dragging !== null ? (pieces[dragging] ?? null) : null;
   const ghostValid = piece && ghostPos ? canPlace(grid, piece.shape, ghostPos.row, ghostPos.col) : false;
@@ -239,39 +261,64 @@ function Game() {
   }
 
   return (
-    <GameShell topbar={<GameTopbar title="Blockudoku" stats={[{ label: "SCORE", value: score, accent: true }, { label: "BEST", value: best }]} onRestart={restart} />}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        height: "100%", gap: 16, userSelect: "none", touchAction: "none" }}
-        onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      height: "100%", gap: 16, userSelect: "none", touchAction: "none" }}
+      onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}>
 
-        <div ref={boardRef} style={{ display: "grid", gridTemplateColumns: `repeat(${SIZE}, 1fr)`, gridTemplateRows: `repeat(${SIZE}, 1fr)`, gap: 2,
-          width: "min(85vw, calc(85vh - 160px), 400px)", aspectRatio: "1", background: "var(--line)",
-          borderRadius: "var(--radius)", padding: 4 }}>
-          {Array.from({ length: SIZE * SIZE }, (_, i) => {
-            const r = Math.floor(i / SIZE), c = i % SIZE;
-            const k = `${r},${c}`;
-            const filled = grid[r]?.[c] === 1;
-            const isGhost = ghostCells.has(k);
-            const isClearing = clearing.has(k);
-            const darkBox = (Math.floor(r / BOX) + Math.floor(c / BOX)) % 2 === 0;
-            return <div key={i} style={{ borderRadius: 4,
-              background: isClearing ? "#fbbf24" : filled ? "var(--accent)"
-                : isGhost ? (piece ? piece.color + "66" : "var(--accent)33")
-                : darkBox ? "var(--paper)" : "color-mix(in srgb, var(--paper) 85%, var(--muted))",
-              transition: isClearing ? "background 0.2s" : "none" }} />;
-          })}
-        </div>
-
-        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-          {pieces.map((p, i) => <PiecePreview key={i} piece={p} index={i} dragging={dragging} onDragStart={handleDragStart} />)}
-        </div>
-
-        {gameOver && <GameOverScreen score={score} highScore={best} onPlayAgain={restart} />}
+      <div ref={boardRef} style={{ display: "grid", gridTemplateColumns: `repeat(${SIZE}, 1fr)`, gridTemplateRows: `repeat(${SIZE}, 1fr)`, gap: 2,
+        width: "min(85vw, calc(85vh - 160px), 400px)", aspectRatio: "1", background: "var(--line)",
+        borderRadius: "var(--radius)", padding: BOARD_PAD }}>
+        {Array.from({ length: SIZE * SIZE }, (_, i) => {
+          const r = Math.floor(i / SIZE), c = i % SIZE;
+          const k = `${r},${c}`;
+          const filled = grid[r]?.[c] === 1;
+          const isGhost = ghostCells.has(k);
+          const isClearing = clearing.has(k);
+          const darkBox = (Math.floor(r / BOX) + Math.floor(c / BOX)) % 2 === 0;
+          return <div key={i} style={{ borderRadius: 4,
+            background: isClearing ? "#fbbf24" : filled ? "var(--accent)"
+              : isGhost ? (piece ? piece.color + "66" : "var(--accent)33")
+              : darkBox ? "var(--paper)" : "color-mix(in srgb, var(--paper) 85%, var(--muted))",
+            transition: isClearing ? "background 0.2s" : "none" }} />;
+        })}
       </div>
-    </GameShell>
+
+      <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+        {pieces.map((p, i) => <PiecePreview key={i} piece={p} index={i} dragging={dragging} onDragStart={handleDragStart} />)}
+      </div>
+
+      {gameOver && <GameOverScreen score={score} highScore={best} onPlayAgain={() => {
+        setGrid(emptyGrid());
+        setPieces([randomPiece(), randomPiece(), randomPiece()]);
+        setScore(0);
+        setGameOver(false);
+        setClearing(new Set());
+      }} />}
+    </div>
   );
 }
 
 export default function App() {
-  return <ErrorCatch><Game /></ErrorCatch>;
+  const [grid, setGrid] = useState<Grid>(emptyGrid);
+  const [pieces, setPieces] = useState<(Piece | null)[]>(() => [randomPiece(), randomPiece(), randomPiece()]);
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(() => {
+    try { return parseInt(localStorage.getItem("blockudoku-best") ?? "0"); } catch { return 0; }
+  });
+  const [gameOver, setGameOver] = useState(false);
+
+  const restart = useCallback(() => {
+    setGrid(emptyGrid());
+    setPieces([randomPiece(), randomPiece(), randomPiece()]);
+    setScore(0);
+    setGameOver(false);
+  }, []);
+
+  return (
+    <GameShell topbar={<GameTopbar title="Blockudoku" stats={[{ label: "SCORE", value: score, accent: true }, { label: "BEST", value: best }]} onRestart={restart} />}>
+      <GameBoard score={score} setScore={setScore} best={best} setBest={setBest}
+        grid={grid} setGrid={setGrid} pieces={pieces} setPieces={setPieces}
+        gameOver={gameOver} setGameOver={setGameOver} />
+    </GameShell>
+  );
 }
