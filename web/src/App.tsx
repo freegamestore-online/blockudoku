@@ -90,7 +90,7 @@ function findClears(grid: Grid): Set<string> {
 }
 
 /** Count distinct lines cleared (rows + cols + boxes). */
-function countLines(grid: Grid, cells: Set<string>): number {
+function countLines(_grid: Grid, cells: Set<string>): number {
   let lines = 0;
   for (let r = 0; r < SIZE; r++) {
     let full = true;
