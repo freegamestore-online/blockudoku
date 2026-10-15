@@ -287,6 +287,11 @@ function GameBoard({ score, setScore, best, setBest, grid, setGrid,
         {pieces.map((p, i) => <PiecePreview key={i} piece={p} index={i} dragging={dragging} onDragStart={handleDragStart} />)}
       </div>
 
+      <a href="https://freegamestore.online" target="_blank" rel="noopener noreferrer"
+        style={{ fontSize: 12, color: "var(--muted)" }}>
+        Part of FreeGameStore — free forever
+      </a>
+
       {gameOver && <GameOverScreen score={score} highScore={best} onPlayAgain={() => {
         setGrid(emptyGrid());
         setPieces([randomPiece(), randomPiece(), randomPiece()]);
@@ -315,7 +320,7 @@ export default function App() {
   }, []);
 
   return (
-    <GameShell topbar={<GameTopbar title="Block Sudoku"stats={[{ label: "SCORE", value: score, accent: true }, { label: "BEST", value: best }]} onRestart={restart} />}>
+    <GameShell topbar={<GameTopbar title="Block Sudoku" stats={[{ label: "SCORE", value: score, accent: true }, { label: "BEST", value: best }]} onRestart={restart} />}>
       <GameBoard score={score} setScore={setScore} best={best} setBest={setBest}
         grid={grid} setGrid={setGrid} pieces={pieces} setPieces={setPieces}
         gameOver={gameOver} setGameOver={setGameOver} />
