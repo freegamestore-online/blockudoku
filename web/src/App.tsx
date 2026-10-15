@@ -315,7 +315,7 @@ export default function App() {
   }, []);
 
   return (
-    <GameShell topbar={<GameTopbar title="Blockudoku" stats={[{ label: "SCORE", value: score, accent: true }, { label: "BEST", value: best }]} onRestart={restart} />}>
+    <GameShell topbar={<GameTopbar title="Block Sudoku"stats={[{ label: "SCORE", value: score, accent: true }, { label: "BEST", value: best }]} onRestart={restart} />}>
       <GameBoard score={score} setScore={setScore} best={best} setBest={setBest}
         grid={grid} setGrid={setGrid} pieces={pieces} setPieces={setPieces}
         gameOver={gameOver} setGameOver={setGameOver} />
