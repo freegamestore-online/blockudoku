@@ -29,7 +29,7 @@ describe("visible title text", () => {
     expect(viteConfig).toContain('short_name: "Block Sudoku",');
     expect(viteConfig).toContain('description: "Block Sudoku — free forever",');
     expect(viteConfig).not.toMatch(/(name|short_name|description):\s*"[^"]*Blockudoku/);
-    expect(viteConfig).not.toContain("APPNAME");
+    expect(viteConfig).not.toContain("APP" + "NAME");
   });
 
   it("no display string in the app mentions Blockudoku", () => {
